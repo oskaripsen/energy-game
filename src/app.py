@@ -112,14 +112,14 @@ def get_random_country_energy():
         'country': str(country_data['country']),
         'total_energy_consumption': float(country_data['primary_energy_consumption']),
         'energy_shares': {
-            'Coal': float(country_data['coal_share_elec'] or 0),
-            'Gas': float(country_data['gas_share_elec'] or 0),
-            'Oil': float(country_data['oil_share_elec'] or 0),
-            'Hydro': float(country_data['hydro_share_elec'] or 0),
-            'Nuclear': float(country_data['nuclear_share_elec'] or 0),
-            'Solar': float(country_data['solar_share_elec'] or 0),
-            'Wind': float(country_data['wind_share_elec'] or 0),
-            'Biofuel': float(country_data['biofuel_share_elec'] or 0)
+            'Coal': float(country_data['coal_share_elec'] if pd.notna(country_data['coal_share_elec']) else 0),
+            'Gas': float(country_data['gas_share_elec'] if pd.notna(country_data['gas_share_elec']) else 0),
+            'Oil': float(country_data['oil_share_elec'] if pd.notna(country_data['oil_share_elec']) else 0),
+            'Hydro': float(country_data['hydro_share_elec'] if pd.notna(country_data['hydro_share_elec']) else 0),
+            'Nuclear': float(country_data['nuclear_share_elec'] if pd.notna(country_data['nuclear_share_elec']) else 0),
+            'Solar': float(country_data['solar_share_elec'] if pd.notna(country_data['solar_share_elec']) else 0),
+            'Wind': float(country_data['wind_share_elec'] if pd.notna(country_data['wind_share_elec']) else 0),
+            'Biofuel': float(country_data['biofuel_share_elec'] if pd.notna(country_data['biofuel_share_elec']) else 0)
         }
     }
 
