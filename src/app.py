@@ -11,7 +11,12 @@ import numpy as np
 app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
-        "origins": ["*"],  # Allow all origins in development
+        "origins": [
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "http://localhost:5000",
+            "https://oskaripsen.github.io"
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
@@ -23,9 +28,10 @@ current_game = {
     'data': None
 }
 
-# Update base URL handling
+# Update CSV path handling
 if os.environ.get('FLASK_ENV') == 'production':
-    CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'owid-energy-data.csv')
+    # Use absolute path in production
+    CSV_PATH = 'data/owid-energy-data.csv'
 else:
     CSV_PATH = r"C:\Users\oskar\Documents\Game\game_backend\data\owid-energy-data.csv"
 
