@@ -9,7 +9,13 @@ from fuzzywuzzy import process
 import numpy as np
 
 app = Flask(__name__)
-CORS(app)  # Simple CORS configuration
+CORS(app, resources={
+    r"/*": {
+        "origins": ["*"],  # Allow all origins in development
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 # Simple in-memory storage
 current_game = {
