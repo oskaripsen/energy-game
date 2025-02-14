@@ -19,7 +19,7 @@ current_game = {
 
 # Update base URL handling
 if os.environ.get('FLASK_ENV') == 'production':
-    CSV_PATH = 'data/owid-energy-data.csv'  # Path in Heroku
+    CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'owid-energy-data.csv')
 else:
     CSV_PATH = r"C:\Users\oskar\Documents\Game\game_backend\data\owid-energy-data.csv"
 
