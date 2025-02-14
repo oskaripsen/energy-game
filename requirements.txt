@@ -1,4 +1,5 @@
 Flask==2.0.1
+Werkzeug==2.0.3  # Add specific Werkzeug version
 flask-cors==4.0.0
 pandas==1.3.5  # Changed to older version with more wheels
 geopy==2.3.0
