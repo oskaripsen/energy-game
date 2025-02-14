@@ -29,11 +29,7 @@ current_game = {
 }
 
 # Update CSV path handling
-if os.environ.get('FLASK_ENV') == 'production':
-    # Use absolute path in production
-    CSV_PATH = 'data/owid-energy-data.csv'
-else:
-    CSV_PATH = r"C:\Users\oskar\Documents\Game\game_backend\data\owid-energy-data.csv"
+CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'owid-energy-data.csv')
 
 # Load data
 df = pd.read_csv(CSV_PATH)
