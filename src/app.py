@@ -48,7 +48,7 @@ COORDINATES_CSV = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data
 if not os.path.exists(COORDINATES_CSV):
     raise FileNotFoundError(f"File not found: {COORDINATES_CSV}. Please run collect_coordinates.py to generate it.")
 coords_df = pd.read_csv(COORDINATES_CSV)
-COUNTRY_COORDINATES = {row['country']: (row['latitude'], row['longitude']) for _, row in coords_df.iterrows()}
+COUNTRY_COORDINATES = {row['country']: (float(row['latitude']), float(row['longitude'])) for _, row in coords_df.iterrows() if pd.notna(row['latitude']) and pd.notna(row['longitude'])}
 
 # Helper functions
 def get_country_coordinates(country):
@@ -80,7 +80,11 @@ def haversine_distance(coord1, coord2):
     return c * r
 
 def get_direction_hint(guess_coords, correct_coords):
-    # Calculate differences
+    # If coordinates are essentially equal, return a correct hint directly
+    if math.isclose(guess_coords[0], correct_coords[0], rel_tol=1e-9) and math.isclose(guess_coords[1], correct_coords[1], rel_tol=1e-9):
+        debug_print("Coordinates match exactly. Returning correct guess hint.")
+        return "Correct", 0.0
+
     lat_diff = correct_coords[0] - guess_coords[0]  # Positive = target is North
     lon_diff = correct_coords[1] - guess_coords[1]  # Positive = target is East
     
@@ -89,17 +93,19 @@ def get_direction_hint(guess_coords, correct_coords):
     debug_print(f"Lat diff: {lat_diff} (+ = North, - = South)")
     debug_print(f"Lon diff: {lon_diff} (+ = East, - = West)")
 
-    # Determine primary direction based on which difference is larger
+    THRESHOLD = 1e-6  # to check if secondary difference is significant
+
+    # Determine primary direction based on which difference is larger and include secondary direction fluently
     if abs(lat_diff) > abs(lon_diff):
         primary = "North" if lat_diff > 0 else "South"
         secondary = "East" if lon_diff > 0 else "West"
-        direction = f"{primary}-{secondary}" if lon_diff != 0 else primary
+        direction = primary if abs(lon_diff) < THRESHOLD else f"{primary} and then a bit {secondary}"
     else:
         primary = "East" if lon_diff > 0 else "West"
         secondary = "North" if lat_diff > 0 else "South"
-        direction = f"{primary}-{secondary}" if lat_diff != 0 else primary
+        direction = primary if abs(lat_diff) < THRESHOLD else f"{primary} and then a bit {secondary}"
 
-    distance = haversine_distance(guess_coords, correct_coords)  # use custom function
+    distance = haversine_distance(guess_coords, correct_coords)
     debug_print(f"Final direction: {direction}, Distance: {distance:.2f} km")
     
     return direction, distance
@@ -113,7 +119,7 @@ def filter_countries(df):
         "World", "Europe", "Asia", "Africa", "OECD", "G20", "G7",
         "Non-OECD", "OPEC", "Middle East", "North America", "South America",
         "Central America", "Ember", "EIA", "EI" , "Oceania", "Lower-middle-income countries", "Latin America and Caribbean (Ember)",
-        "Low-income countries", "Antarctica" ,"High-income countries", "Netherlands Antilles", "Upper-middle-income countries"
+        "Low-income countries", "Palestine", "Antarctica" ,"High-income countries", "Netherlands Antilles", "Upper-middle-income countries"
 
 
     ]
@@ -125,19 +131,19 @@ def get_random_country_energy():
     df_year = df[df['year'] == 2020]
     df_year = filter_countries(df_year)
     
-    # Update column names to match the CSV file
+    # Update column names to match the CSV file with new values
     energy_columns = [
         'country',
-        'primary_energy_consumption',
-        'coal_share_elec',
-        'gas_share_elec',
-        'oil_share_elec',
-        'hydro_share_elec',
-        'nuclear_share_elec',
-        'solar_share_elec',
-        'wind_share_elec',
-        'biofuel_share_elec',
-        'renewables_share_elec'
+        'electricity_generation',
+        'coal_electricity',
+        'gas_electricity',
+        'oil_electricity',
+        'hydro_electricity',
+        'nuclear_electricity',
+        'solar_electricity',
+        'wind_electricity',
+        'biofuel_electricity',
+        'other_renewable_electricity',  # new column added
     ]
     
     # Check that all required columns exist
@@ -147,24 +153,32 @@ def get_random_country_energy():
             debug_print(f"Missing column: {col}")
     
     df_year = df_year[energy_columns]
-    df_year = df_year.dropna(subset=['primary_energy_consumption'])
+    df_year = df_year.dropna(subset=['electricity_generation'])
     
     random_country = random.choice(df_year['country'].dropna().unique())
     country_data = df_year[df_year['country'] == random_country].iloc[0].to_dict()
     
-    # Prepare the cleaned data for the frontend
+    # Prepare the cleaned data for the frontend with updated column names
+    # Compute Other Renewables = other_renewable_electricity - biofuel_electricity
+    other_renewables = (
+        (float(country_data['other_renewable_electricity']) if pd.notna(country_data['other_renewable_electricity']) else 0)
+        - (float(country_data['biofuel_electricity']) if pd.notna(country_data['biofuel_electricity']) else 0)
+    )
+    
     cleaned_data = {
         'country': str(country_data['country']),
-        'total_energy_consumption': float(country_data['primary_energy_consumption']),
-        'energy_shares': {
-            'Coal': float(country_data['coal_share_elec'] if pd.notna(country_data['coal_share_elec']) else 0),
-            'Gas': float(country_data['gas_share_elec'] if pd.notna(country_data['gas_share_elec']) else 0),
-            'Oil': float(country_data['oil_share_elec'] if pd.notna(country_data['oil_share_elec']) else 0),
-            'Hydro': float(country_data['hydro_share_elec'] if pd.notna(country_data['hydro_share_elec']) else 0),
-            'Nuclear': float(country_data['nuclear_share_elec'] if pd.notna(country_data['nuclear_share_elec']) else 0),
-            'Solar': float(country_data['solar_share_elec'] if pd.notna(country_data['solar_share_elec']) else 0),
-            'Wind': float(country_data['wind_share_elec'] if pd.notna(country_data['wind_share_elec']) else 0),
-            'Biofuel': float(country_data['biofuel_share_elec'] if pd.notna(country_data['biofuel_share_elec']) else 0)
+        # Use the original "electricity_generation" from the CSV
+        'electricity_generation': float(country_data['electricity_generation']),
+        'electricity_shares': {
+            'Coal': float(country_data['coal_electricity'] if pd.notna(country_data['coal_electricity']) else 0),
+            'Gas': float(country_data['gas_electricity'] if pd.notna(country_data['gas_electricity']) else 0),
+            'Oil': float(country_data['oil_electricity'] if pd.notna(country_data['oil_electricity']) else 0),
+            'Hydro': float(country_data['hydro_electricity'] if pd.notna(country_data['hydro_electricity']) else 0),
+            'Nuclear': float(country_data['nuclear_electricity'] if pd.notna(country_data['nuclear_electricity']) else 0),
+            'Solar': float(country_data['solar_electricity'] if pd.notna(country_data['solar_electricity']) else 0),
+            'Wind': float(country_data['wind_electricity'] if pd.notna(country_data['wind_electricity']) else 0),
+            'Biofuel': float(country_data['biofuel_electricity'] if pd.notna(country_data['biofuel_electricity']) else 0),
+            'Geothermal': other_renewables,
         }
     }
 
@@ -263,11 +277,18 @@ def guess():
         
         if guess_coords and correct_coords:
             hint, distance = get_direction_hint(guess_coords, correct_coords)
-            return jsonify({
-                "message": f"Try looking {hint}. Distance: {distance:.2f} km.",
-                "target": correct_country,
-                "game_over": False
-            })
+            if hint == "Correct":
+                return jsonify({
+                    "message": "Correct! You've guessed the country!",
+                    "target": correct_country,
+                    "game_over": True
+                })
+            else:
+                return jsonify({
+                    "message": f"Try looking {hint}. Distance: {distance:,.0f} km.",
+                    "target": correct_country,
+                    "game_over": False
+                })
         else:
             return jsonify({
                 "message": "Unable to determine direction. Please try another country.",
