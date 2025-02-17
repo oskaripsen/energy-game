@@ -8,6 +8,7 @@ from fuzzywuzzy import process
 import numpy as np
 import math  # new import
 from functools import lru_cache  # new import
+import re  # new import for regular expression escaping
 
 DEBUG = False  # disable debug logs in production
 
@@ -53,18 +54,18 @@ COUNTRY_COORDINATES = {row['country']: (float(row['latitude']), float(row['longi
 
 # Helper functions
 def get_country_coordinates(country):
+    # Only return coordinates for an exact match
     coords = COUNTRY_COORDINATES.get(country)
-    if coords:
-        try:
-            # cast values to float to ensure numerical operations work
-            lat, lon = float(coords[0]), float(coords[1])
-            debug_print(f"get_country_coordinates for {country}: ({lat}, lon)")
-            return (lat, lon)
-        except Exception as e:
-            debug_print(f"Error casting coordinates for {country}: {e}")
-            return None
-    debug_print(f"get_country_coordinates for {country}: {coords}")
-    return None
+    if coords is None:
+        debug_print(f"No exact match found for {country}")
+        return None
+    try:
+        lat, lon = float(coords[0]), float(coords[1])
+        debug_print(f"get_country_coordinates for {country}: ({lat, lon})")
+        return (lat, lon)
+    except Exception as e:
+        debug_print(f"Error casting coordinates for {country}: {e}")
+        return None
 
 def haversine_distance(coord1, coord2):
     # Coordinates in decimal degrees (lat, lon)
@@ -119,12 +120,12 @@ def filter_countries(df):
     exclusions = [
         "World", "Europe", "Asia", "Africa", "OECD", "G20", "G7",
         "Non-OECD", "OPEC", "Middle East", "North America", "South America",
-        "Central America", "Ember", "EIA", "EI" , "Oceania", "Lower-middle-income countries", "Latin America and Caribbean (Ember)",
-        "Low-income countries", "Palestine", "Niue", "Antarctica" ,"High-income countries", "Netherlands Antilles", "Upper-middle-income countries"
-
-
+        "Central America", "Ember", "EIA", "EI", "Oceania", "Lower-middle-income countries",
+        "Latin America and Caribbean (Ember)", "Low-income countries", "Palestine", 
+        "Niue", "Antarctica", "High-income countries", "Netherlands Antilles", "Upper-middle-income countries"
     ]
-    return df[~df['country'].str.contains('|'.join(exclusions), na=False)]
+    pattern = "|".join([re.escape(exclusion) for exclusion in exclusions])
+    return df[~df['country'].str.contains(pattern, na=False)]
 
 def get_random_country_energy():
     debug_print("Available columns:", df.columns.tolist())  # Debug print
@@ -163,10 +164,11 @@ def get_random_country_energy():
     
     # Prepare the cleaned data for the frontend with updated column names
     # Compute Other Renewables = other_renewable_electricity - biofuel_electricity
-    other_renewables = (
+    double_val = (
         (float(country_data['other_renewable_electricity']) if pd.notna(country_data['other_renewable_electricity']) else 0)
         - (float(country_data['biofuel_electricity']) if pd.notna(country_data['biofuel_electricity']) else 0)
     )
+    other_renewables = max(0, double_val)
     
     cleaned_data = {
         'country': str(country_data['country']),
@@ -229,15 +231,10 @@ def start_game():
     if 'used_countries' not in session:
         session['used_countries'] = []
         
-    country, country_data = get_random_country_energy()
-    # Loop until a new country is found for this session
-    while country in session['used_countries']:
-        country, country_data = get_random_country_energy()
-    # Add to session storage
-    used = session['used_countries']
-    used.append(country)
-    session['used_countries'] = used
+    # Retrieve energy data (original random selection)
+    country, country_data = get_random_country_energy()  # ...existing code...
 
+    session['used_countries'] = [country]
     current_game['country'] = country
     current_game['data'] = country_data
     debug_print(f"Selected country: {country}")
@@ -275,6 +272,21 @@ def guess():
             }), 400
 
         user_guess = data['guess']
+        # Ensure "used_countries" key exists in session
+        if 'used_countries' not in session:
+            session['used_countries'] = []
+        # Case-insensitive check for repeated guess
+        if any(user_guess.lower() == guess.lower() for guess in session.get('used_countries', [])):
+            return jsonify({
+                "message": "Country already guessed. Please select a new country.",
+                "error": True,
+                "target": correct_country
+            }), 400
+
+        # Append the new guess to the session history and mark session as modified
+        session['used_countries'].append(user_guess)
+        session.modified = True
+        
         if not is_valid_country(user_guess):
             return jsonify({
                 "message": "Invalid country. Please select from the suggestions.",
@@ -308,6 +320,8 @@ def guess():
                 "game_over": False
             })
     except Exception as e:
+        import traceback
+        traceback.print_exc()  # Print full stack trace to the console for debugging
         debug_print(f"Error in /guess endpoint: {e}")
         return jsonify({
             "message": "An unexpected error occurred.",
