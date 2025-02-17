@@ -1,5 +1,5 @@
 import os
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session  # new import for session management
 from flask_cors import CORS
 import pandas as pd
 import random
@@ -16,6 +16,7 @@ def debug_print(*args, **kwargs):
         print(*args, **kwargs)
 
 app = Flask(__name__)
+app.secret_key = "c183e021456dbfa985bb56650b28ecc490cd8f5bbcb0b8ce"  # new secret key for session usage
 CORS(app, resources={
     r"/*": {
         "origins": [
@@ -119,7 +120,7 @@ def filter_countries(df):
         "World", "Europe", "Asia", "Africa", "OECD", "G20", "G7",
         "Non-OECD", "OPEC", "Middle East", "North America", "South America",
         "Central America", "Ember", "EIA", "EI" , "Oceania", "Lower-middle-income countries", "Latin America and Caribbean (Ember)",
-        "Low-income countries", "Palestine", "Antarctica" ,"High-income countries", "Netherlands Antilles", "Upper-middle-income countries"
+        "Low-income countries", "Palestine", "Niue", "Antarctica" ,"High-income countries", "Netherlands Antilles", "Upper-middle-income countries"
 
 
     ]
@@ -152,6 +153,8 @@ def get_random_country_energy():
         if col not in available_columns:
             debug_print(f"Missing column: {col}")
     
+    # Drop rows where electricity_generation is 0.000
+    df_year = df_year[df_year['electricity_generation'] != 0.000]
     df_year = df_year[energy_columns]
     df_year = df_year.dropna(subset=['electricity_generation'])
     
@@ -222,12 +225,21 @@ def suggestions():
 @app.route('/start_game', methods=['GET'])
 def start_game():
     debug_print("Start game endpoint called")
+    # Initialize session storage for used countries if not present
+    if 'used_countries' not in session:
+        session['used_countries'] = []
+        
     country, country_data = get_random_country_energy()
-    
-    # Store in our global state
+    # Loop until a new country is found for this session
+    while country in session['used_countries']:
+        country, country_data = get_random_country_energy()
+    # Add to session storage
+    used = session['used_countries']
+    used.append(country)
+    session['used_countries'] = used
+
     current_game['country'] = country
     current_game['data'] = country_data
-    
     debug_print(f"Selected country: {country}")
     return jsonify({
         "energy_data": country_data,
